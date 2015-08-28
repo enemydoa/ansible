@@ -1,0 +1,99 @@
+##
+# Ansible playbook for setting up a development environment.
+#
+
+---
+- hosts: all
+
+  vars:
+    ruby_version: "2.1.3"
+    rvm_path: "/usr/local/rvm/gems/ruby-{{ ruby_version }}/bin:/usr/local/rvm/gems/ruby-{{ ruby_version }}@global/bin:/usr/local/rvm/rubies/ruby-{{ ruby_version }}/bin:/usr/local/rvm/bin"
+
+  tasks:
+
+  - name: general | update apt
+    apt: update_cache=yes upgrade=full
+    tags: [apt]
+
+  - name: general | install base packages
+    apt: name={{ item }} state=latest
+    with_items:
+       - gcc
+       - vim
+       - curl
+       - gawk
+       - ncdu
+       - nginx
+       - maven
+       - gnupg2
+       - libmysqlclient-dev
+       - python-dev
+       - python-setuptools
+       - mysql-server
+       - redis-server
+       - git-core
+       - mysql-client
+       - python-setuptools
+       - libssl-dev
+       - libyaml-dev
+       - libsqlite3-dev
+       - sqlite3
+       - autoconf
+       - libgdbm-dev
+       - libncurses5-dev
+       - automake
+       - bison
+       - libffi-dev
+    tags: [apt]
+
+  - name: java | install repo
+    apt_repository: repo=ppa:webupd8team/java update-cache=yes 
+    tags: [java]
+
+  - name: java | accept license
+    shell: echo debconf shared/accepted-oracle-license-v1-1 select true | debconf-set-selections
+    tags: [java]
+
+  - name: java | install java 8
+    apt: pkg=oracle-java8-installer
+    tags: [java]
+
+  - name: elasticsearch | adding elasticsearch gpg key
+    apt_key: url=http://packages.elasticsearch.org/GPG-KEY-elasticsearch state=present
+    tags: [es]
+
+  - name: elasticsearch | add elasticsearch repository 
+    apt_repository: repo='deb http://packages.elasticsearch.org/elasticsearch/1.4/debian stable main' state=present
+    tags: [es]
+
+  - name: elasticsearch | install elasticsearch
+    apt: name=elasticsearch state=present update_cache=yes cache_valid_time=3600
+    tags: [es]
+
+  - name: rvm | ensure that GPG key for RVM is installed
+    command: gpg --keyserver hkp://keys.gnupg.net --recv-keys 409B6B1796C275462A1703113804BB82D39DC0E3
+    args:
+      creates: /root/.gnupg/secring.gpg
+    tags: [rvm]
+
+  - name: rvm | ensure that RVM is installed
+    shell: curl -sSL https://get.rvm.io | bash -s stable --rails
+    args:
+      creates: /usr/local/rvm
+    tags: [rvm]
+
+  - name: rvm | ensure that ruby is installed
+    command: "rvm install {{ ruby_version }}"
+    args:
+      creates: "/usr/local/rvm/gems/ruby-{{ ruby_version }}"
+    environment:
+      PATH: "{{ rvm_path }}:{{ ansible_env.PATH }}"
+    tags: [rvm]
+
+  - name: rvm | set default version of ruby with rvm
+    command: "rvm alias create default ruby-{{ ruby_version }}"
+    args:
+      creates: /usr/local/rvm/config/alias
+    environment:
+      PATH: "{{ rvm_path }}:{{ ansible_env.PATH }}"
+    tags: [rvm]
