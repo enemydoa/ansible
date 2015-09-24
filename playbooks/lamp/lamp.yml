@@ -1,0 +1,24 @@
+##
+# Ansible playbook for setting up LAMP server.
+#
+
+---
+- hosts: all
+
+  tasks:
+
+  - name: general | update apt
+    apt: update_cache=yes upgrade=full
+    tags: [apt]
+
+  - name: general | install base packages
+    apt: name={{ item }} state=latest
+    with_items:
+       - apache2
+       - php5-mysql
+       - mysql-server
+       - libapache2-mod-php5
+       - php5-mcrypt
+       - php5-gd
+       - php5-curl
+    tags: [apt]
