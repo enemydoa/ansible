@@ -84,7 +84,7 @@
     tags: [nagiossrc]
 
   - name: nagios | configure
-    shell: cd {{ nagiosbuilddir }}/nagios/{{ nagiossrc }} && ./configure --with-nagios-group=nagios --with-command-group=nagcmd -with-httpd_conf=/etc/apache2/conf-available
+    shell: cd {{ nagiosbuilddir }}/nagios/{{ nagiossrc }} && ./configure --with-nagios-group=nagios --with-command-group=nagcmd --with-httpd_conf=/etc/apache2/conf-available
     tags: [nagios]
 
   - name: nagios | make all
