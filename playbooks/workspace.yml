@@ -44,7 +44,7 @@
        - automake
        - bison
        - libffi-dev
-    tags: [pckg]
+    tags: [apt]
 
   - name: java | install repo
     apt_repository: repo=ppa:webupd8team/java update-cache=yes 

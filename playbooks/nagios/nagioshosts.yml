@@ -1,0 +1,28 @@
+##
+# Ansible playbook for setting up Nagios Hosts.
+#
+
+---
+- hosts: all
+
+  tasks:
+
+#instal required packages
+  - name: general | update apt
+    apt: update_cache=yes upgrade=full
+    tags: [apt]
+
+  - name: general | install nagios packages
+    apt: name={{ item }} state=latest
+    with_items:
+       - nagios-nrpe-server
+       - nagios-plugins
+    tags: [pckg]
+
+  - name: config | add server IP address to nrpe.cfg
+    lineinfile: "dest=/etc/nagios/nrpe.cfg regexp='^allowed_hosts=127.0.0.1$' line='allowed_hosts=127.0.0.1, 10.128.32.16'"
+    tags: [nrpe]
+
+  - name: services | restart nrpe-server
+    service: name=nagios-nrpe-server state=restarted
+    tags: [service]

@@ -41,6 +41,7 @@
        - openssl
        - xinetd
        - unzip
+       - exim4
     tags: [nagiosreq]
 
   - name: requirements | install plugin prerequisites
