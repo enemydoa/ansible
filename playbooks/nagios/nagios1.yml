@@ -1,0 +1,221 @@
+##
+# Ansible playbook for setting up Nagios.
+#
+
+---
+- hosts: all
+
+  vars:
+    nagiosadminpass: nagiospass
+    nagiosurl: https://assets.nagios.com/downloads/nagioscore/releases/nagios-4.1.1.tar.gz
+    nagiossrc: nagios-4.1.1
+    pluginsurl: http://nagios-plugins.org/download/nagios-plugins-2.1.1.tar.gz
+    pluginssrc: nagios-plugins-2.1.1
+    nrpeurl: http://downloads.sourceforge.net/project/nagios/nrpe-2.x/nrpe-2.15/nrpe-2.15.tar.gz
+    nrpesrc: nrpe-2.15
+    nagiosbuilddir: /tmp
+    apacheuser: www-data
+
+  tasks:
+
+#instal required packages
+  - name: general | update apt
+    apt: update_cache=yes upgrade=full
+    tags: [apt]
+
+  - name: apache | install apache
+    apt: pkg={{ item }} state=present update_cache=yes
+    with_items:
+       - apache2
+       - php5-gd
+       - apache2-utils
+       - libgd2-xpm-dev
+       - libapache2-mod-php5
+    tags: [apachereq]
+
+  - name: requirements | install Nagios prerequisites
+    apt: pkg={{ item }} state=present
+    with_items:
+       - build-essential
+       - python-passlib
+       - openssl
+       - xinetd
+       - unzip
+       - exim4
+    tags: [nagiosreq]
+
+  - name: requirements | install plugin prerequisites
+    apt: pkg={{ item }} state=present
+    with_items:
+       - libssl-dev
+       - dnsutils
+       - fping
+       - libldap2-dev
+       - libpq-dev
+       - libradiusclient-ng-dev
+       - smbclient
+       - gawk
+    tags: [pluginreq]
+
+#manage nagios users
+  - name: user | create nagcmd group
+    group: name=nagcmd state=present
+    tags: [user]
+
+  - name: user | create nagios user
+    user: name=nagios state=present groups=nagcmd
+    tags: [user]
+
+  - name: user | add apache user to nagcmd group
+    user: name={{ apacheuser }} state=present groups=nagcmd
+    tags: [user]
+
+#prebuild action
+  - name: general | swap device creating
+    command: "{{item}}"
+    with_items:
+      - dd if=/dev/zero of=/swap bs=1024 count=2097152
+      - mkswap /swap
+      - chown root. /swap
+      - chmod 0600 /swap
+      - swapon /swap
+      - sh -c "echo /swap swap swap defaults 0 0 >> /etc/fstab"
+      - sh -c "echo vm.swappiness = 0 >> /etc/sysctl.conf && sysctl -p"
+    tags: [swapcreate]
+
+  - name: general | ensure download directory is present
+    file: path={{ nagiosbuilddir }}/nagios state=directory
+    tags: [prebuild]
+
+#configure nagios
+  - name: nagios | download nagios
+    get_url: url={{ nagiosurl }} dest={{ nagiosbuilddir }}/nagios/{{ nagiossrc }}.tar.gz
+    tags: [nagiossrc]
+
+  - name: nagios | unpack nagios source files
+    shell: cd {{ nagiosbuilddir }}/nagios && tar -xzvf {{ nagiossrc }}.tar.gz creates={{ nagiosbuilddir }}/nagios/{{ nagiossrc }}
+    tags: [nagiossrc]
+
+  - name: nagios | configure
+    shell: cd {{ nagiosbuilddir }}/nagios/{{ nagiossrc }} && ./configure --with-nagios-group=nagios --with-command-group=nagcmd --with-httpd_conf=/etc/apache2/conf-available
+    tags: [nagios]
+
+  - name: nagios | make all
+    shell: cd {{ nagiosbuilddir }}/nagios/{{ nagiossrc }} && make all
+    tags: [nagios]
+
+  - name: nagios | make install
+    shell: cd {{ nagiosbuilddir }}/nagios/{{ nagiossrc }} && make install
+    tags: [nagios]
+
+  - name: nagios | make install-config
+    shell: cd {{ nagiosbuilddir }}/nagios/{{ nagiossrc }} && make install-config
+    tags: [nagios]
+
+  - name: nagios | make install-commandmode
+    shell: cd {{ nagiosbuilddir }}/nagios/{{ nagiossrc }} && make install-commandmode
+    tags: [nagios]
+
+  - name: nagios | make install-init
+    shell: cd {{ nagiosbuilddir }}/nagios/{{ nagiossrc }} && make install-init
+    tags: [nagios]
+
+  - name: nagios | make install-webconf
+    shell: cd {{ nagiosbuilddir }}/nagios/{{ nagiossrc }} && make install-webconf
+    tags: [nagios]
+
+  - name: nagios | activate nagios site
+    file: src=/etc/apache2/conf-available/nagios.conf dest=/etc/apache2/conf-enabled/nagios.conf state=link owner=root group=root
+    tags: [nagios]
+
+  - name: nagios | activate nagios startup
+    file: src=/etc/init.d/nagios dest=/etc/rcS.d/S99nagios state=link owner=root group=root
+    tags: [nagios]
+
+  - name: nagios | set passwd for nagiosadmin
+    htpasswd: path=/usr/local/nagios/etc/htpasswd.users name=nagiosadmin password={{ nagiosadminpass }} state=present
+    tags: [nagios]
+
+  - name: nagios | add servers to nagios.cfg
+    shell: echo 'cfg_dir=/usr/local/nagios/etc/servers' >>/usr/local/nagios/etc/nagios.cfg
+    tags: [nagios]
+
+  - name: nagios | ensure servers directory is present
+    file: path=/usr/local/nagios/etc/servers state=directory
+    tags: [nagios]
+
+#configure nagios plugins
+  - name: plugins | get plugins
+    get_url: url={{ pluginsurl }} dest={{ nagiosbuilddir }}/nagios/{{ pluginssrc }}.tar.gz
+    tags: [plugins]
+
+  - name: plugins | unpack plugin source files
+    shell: cd {{ nagiosbuilddir }}/nagios && tar -xzvf {{ pluginssrc }}.tar.gz creates={{ nagiosbuilddir }}/nagios/{{ pluginssrc }}
+    tags: [plugins]
+
+  - name: plugins | configure plugins
+    shell: cd {{ nagiosbuilddir }}/nagios/{{ pluginssrc }} && ./configure --with-nagios-user=nagios --with-nagios-group=nagios --with-openssl=/usr/bin/openssl
+    tags: [plugins]
+
+  - name: plugins | make plugins
+    shell: cd {{ nagiosbuilddir }}/nagios/{{ pluginssrc }} && make
+    tags: [plugins]
+
+  - name: plugins | make install plugins
+    shell: cd {{ nagiosbuilddir }}/nagios/{{ pluginssrc }} && make install
+    tags: [plugins]
+
+#configure NRPE
+  - name: nrpe | get NRPE
+    get_url: url={{ nrpeurl }} dest={{ nagiosbuilddir }}/nagios/{{ nrpesrc }}.tar.gz
+    tags: [nrpe]
+
+  - name: nrpe | unpack NRPE source files
+    shell: cd {{ nagiosbuilddir }}/nagios && tar -xzvf {{ nrpesrc }}.tar.gz creates={{ nagiosbuilddir }}/nagios/{{ nrpesrc }}
+    tags: [nrpe]
+
+  - name: nrpe | configure NRPE
+    shell: cd {{ nagiosbuilddir }}/nagios/{{ nrpesrc }} && ./configure --enable-command-args --with-nagios-user=nagios --with-nagios-group=nagios --with-ssl=/usr/bin/openssl --with-ssl-lib=/usr/lib/x86_64-linux-gnu
+
+  - name: nrpe | make NRPE
+    shell: cd {{ nagiosbuilddir }}/nagios/{{ nrpesrc }} && make all
+    tags: [nrpe]
+
+  - name: nrpe | make install NRPE
+    shell: cd {{ nagiosbuilddir }}/nagios/{{ nrpesrc }} && make install
+    tags: [nrpe]
+
+  - name: nrpe | make install-xinetd NRPE
+    shell: cd {{ nagiosbuilddir }}/nagios/{{ nrpesrc }} && make install-xinetd
+    tags: [nrpe]
+
+  - name: nrpe | make install-daemon-config NRPE
+    shell: cd {{ nagiosbuilddir }}/nagios/{{ nrpesrc }} && make install-daemon-config
+    tags: [nrpe]
+
+  - name: nrpe | add npre to commands
+    shell: echo
+          'define command{\n        command_name check_nrpe\n        command_line $USER1$/check_nrpe -H $HOSTADDRESS$ -c $ARG1$\n        }' >>/usr/local/nagios/etc/objects/commands.cfg
+    tags: [nrpe]
+
+#start services
+
+  - name: services | ensure xinetd is started
+    service: name=xinetd state=restarted
+    tags: [service]
+
+  - name: services | configure rewrite
+    command: a2enmod rewrite
+    tags: [service]
+
+  - name: services | configure cgi
+    command: a2enmod cgi
+    tags: [service]
+
+  - name: services | ensure Apache2 is started
+    service: name=apache2 state=restarted
+    tags: [service]
+
+  - name: services | ensure Nagios is started
+    service: name=nagios state=started enabled=yes
+    tags: [service]

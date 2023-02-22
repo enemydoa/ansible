@@ -1,0 +1,24 @@
+##
+# Ansible playbook for adding redis ppa.
+#
+
+---
+- hosts: all
+
+  tasks:
+
+  - name: general | update apt
+    apt: update_cache=yes upgrade=full
+    tags: [apt]
+
+  - name: Add the Redis PPA
+    apt_repository: repo='ppa:chris-lea/redis-server' update_cache=yes
+    tags: [redis]
+
+  - name: Install Redis from PPA
+    apt: name=redis-server state=installed
+    tags: [redis]
+
+  - name: Start Redis
+    service: name=redis-server state=started
+    tags: [redis]
